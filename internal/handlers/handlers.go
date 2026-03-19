@@ -13,6 +13,11 @@ import (
 	"github.com/Yandex-Practicum/go1fl-sprint6-final/internal/service"
 )
 
+const (
+	uploadDir   = "uploads/"
+	maxFileSize = 10 << 20
+)
+
 func IndexHandler(w http.ResponseWriter, r *http.Request) {
 	file, err := os.Open("index.html")
 	if err != nil {
@@ -25,11 +30,12 @@ func IndexHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_, err = io.Copy(w, file)
 	if err != nil {
-		log.Printf("Ошибка копирования файл в ответ: %v, err")
+		log.Printf("Ошибка копирования файла в ответ: %v, err")
 	}
 }
+
 func UploadHandler(w http.ResponseWriter, r *http.Request) {
-	err := r.ParseMultipartForm(10 << 20)
+	err := r.ParseMultipartForm(maxFileSize)
 	if err != nil {
 		http.Error(w, "Ошибка парсинга формы", http.StatusInternalServerError)
 		log.Printf("Ошибка парсинга формы: %v", err)
@@ -53,9 +59,21 @@ func UploadHandler(w http.ResponseWriter, r *http.Request) {
 
 	resultStr, err := service.Convert(string(data))
 	if err != nil {
-		http.Error(w, "Ошибка конертации", http.StatusInternalServerError)
+		http.Error(w, "Ошибка конвертации", http.StatusInternalServerError)
 		log.Printf("Ошибка конвертации: %v", err)
 		return
+	}
+
+	if resultStr == "" {
+		http.Error(w, "Пустой результат конвертации", http.StatusBadRequest)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	fmt.Fprintf(w, "Результат конвертации:\n%s", resultStr)
+
+	if err := os.MkdirAll(uploadDir, os.ModePerm); err != nil {
+		log.Printf("Ошибка создания директории для загрузок: %v", err)
 	}
 
 	timestamp := time.Now().UTC().String()
@@ -63,11 +81,10 @@ func UploadHandler(w http.ResponseWriter, r *http.Request) {
 	safeTimestamp = strings.ReplaceAll(safeTimestamp, " ", "_")
 
 	ext := filepath.Ext(header.Filename)
-	newFileName := fmt.Sprintf("result_%s%s", safeTimestamp, ext)
+	newFileName := fmt.Sprintf("%sresult_%s%s", uploadDir, safeTimestamp, ext)
 
 	outFile, err := os.Create(newFileName)
 	if err != nil {
-		http.Error(w, "Ошибка сщздания файла результата", http.StatusInternalServerError)
 		log.Printf("Ошибка создания файла %s: %v", newFileName, err)
 		return
 	}
@@ -75,12 +92,6 @@ func UploadHandler(w http.ResponseWriter, r *http.Request) {
 
 	_, err = outFile.WriteString(resultStr)
 	if err != nil {
-		http.Error(w, "Ошибка записи в файл", http.StatusInternalServerError)
 		log.Printf("Ошибка записи в файл: %v", err)
-		return
 	}
-
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	fmt.Fprintf(w, "Конвертация успешна\nРезультат сохранен в файл: %s\n\nСодержимое: \n%s", newFileName, resultStr)
-
 }
