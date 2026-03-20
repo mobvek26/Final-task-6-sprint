@@ -16,6 +16,7 @@ type Server struct {
 func NewServer(logger *log.Logger) *Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", handlers.IndexHandler)
+	mux.HandleFunc("/upload", handlers.UploadHandler)
 
 	srv := &http.Server{
 		Addr:         ":8080",
@@ -25,6 +26,7 @@ func NewServer(logger *log.Logger) *Server {
 		WriteTimeout: 10 * time.Second,
 		IdleTimeout:  15 * time.Second,
 	}
+
 	return &Server{
 		Logger: logger,
 		Svr:    srv,

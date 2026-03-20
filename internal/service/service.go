@@ -3,6 +3,7 @@ package service
 import (
 	"errors"
 	"strings"
+	"unicode"
 
 	"github.com/Yandex-Practicum/go1fl-sprint6-final/pkg/morse"
 )
@@ -11,22 +12,30 @@ func Convert(input string) (string, error) {
 	if input == "" {
 		return "", errors.New("пустая строка")
 	}
-	trimmed := strings.TrimSpace(input)
 
-	isMorse := true
+	trimmed := strings.TrimSpace(input)
+	if trimmed == "" {
+		return "", errors.New("строка состоит только из пробелов")
+	}
+
+	isText := false
 	for _, r := range trimmed {
-		if r != '.' && r != '-' && r != ' ' && r != '\n' && r != '\r' {
-			isMorse = false
+		if unicode.IsLetter(r) {
+			isText = true
 			break
 		}
 	}
-	if isMorse {
-		result := morse.ToText(trimmed)
-		if result == "" && trimmed != "" {
 
-		}
-		return result, nil
+	var result string
+	if isText {
+		result = morse.ToMorse(trimmed)
 	} else {
-		return morse.ToMorse(trimmed), nil
+		result = morse.ToText(trimmed)
 	}
+
+	if result == "" && trimmed != "" {
+		return "", errors.New("не удалось выполнить конвертацию: результат пуст")
+	}
+
+	return result, nil
 }

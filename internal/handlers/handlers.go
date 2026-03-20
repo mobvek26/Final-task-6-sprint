@@ -30,11 +30,13 @@ func IndexHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_, err = io.Copy(w, file)
 	if err != nil {
-		log.Printf("Ошибка копирования файла в ответ: %v, err")
+		log.Printf("Ошибка копирования файла в ответ: %v", err)
 	}
 }
 
 func UploadHandler(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, maxFileSize)
+
 	err := r.ParseMultipartForm(maxFileSize)
 	if err != nil {
 		http.Error(w, "Ошибка парсинга формы", http.StatusInternalServerError)
@@ -57,41 +59,47 @@ func UploadHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resultStr, err := service.Convert(string(data))
+	content := string(data)
+	if strings.TrimSpace(content) == "" {
+		http.Error(w, "Файл пуст", http.StatusBadRequest)
+		return
+	}
+
+	resultStr, err := service.Convert(content)
 	if err != nil {
 		http.Error(w, "Ошибка конвертации", http.StatusInternalServerError)
 		log.Printf("Ошибка конвертации: %v", err)
 		return
 	}
 
-	if resultStr == "" {
-		http.Error(w, "Пустой результат конвертации", http.StatusBadRequest)
-		return
-	}
-
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	fmt.Fprintf(w, "Результат конвертации:\n%s", resultStr)
-
 	if err := os.MkdirAll(uploadDir, os.ModePerm); err != nil {
-		log.Printf("Ошибка создания директории для загрузок: %v", err)
+		log.Printf("Ошибка создания директории %s: %v", uploadDir, err)
 	}
 
-	timestamp := time.Now().UTC().String()
-	safeTimestamp := strings.ReplaceAll(timestamp, ":", "-")
-	safeTimestamp = strings.ReplaceAll(safeTimestamp, " ", "_")
-
+	timestamp := time.Now().UTC().Format("2006-01-02_15-04-05")
 	ext := filepath.Ext(header.Filename)
-	newFileName := fmt.Sprintf("%sresult_%s%s", uploadDir, safeTimestamp, ext)
+	if ext == "" {
+		ext = ".txt"
+	}
+
+	newFileName := fmt.Sprintf("%sresult_%s%s", uploadDir, timestamp, ext)
 
 	outFile, err := os.Create(newFileName)
 	if err != nil {
 		log.Printf("Ошибка создания файла %s: %v", newFileName, err)
+		http.Error(w, "Ошибка сохранения результата", http.StatusInternalServerError)
 		return
 	}
 	defer outFile.Close()
 
 	_, err = outFile.WriteString(resultStr)
 	if err != nil {
-		log.Printf("Ошибка записи в файл: %v", err)
+		log.Printf("Ошибка записи в файл %s: %v", newFileName, err)
+		http.Error(w, "Ошибка записи результата", http.StatusInternalServerError)
+		return
 	}
+
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	fmt.Fprintf(w, resultStr)
+
 }
